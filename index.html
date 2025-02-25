@@ -1,1 +1,103 @@
-test goog men
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카페 즉시 할인</title>
+    <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
+    <script type="module">
+        // Firebase SDK 불러오기
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+        // Firebase 설정
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        
+        // Firebase 초기화
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Kakao SDK 초기화
+        Kakao.init('YOUR_JAVASCRIPT_KEY'); // 여기에 본인의 JavaScript 키 입력
+        console.log("Kakao SDK 초기화 완료");
+
+        let userId = null; // 로그인한 사용자 ID
+
+        function kakaoLogin() {
+            Kakao.Auth.login({
+                success: function(authObj) {
+                    console.log("로그인 성공", authObj);
+                    Kakao.API.request({
+                        url: '/v2/user/me',
+                        success: async function(res) {
+                            console.log("사용자 정보:", res);
+                            userId = res.id; // 사용자 고유 ID
+                            alert(res.kakao_account.profile.nickname + "님 환영합니다!");
+
+                            // Firestore에 사용자 정보 저장
+                            const userRef = doc(db, "users", userId.toString());
+                            await setDoc(userRef, {
+                                nickname: res.kakao_account.profile.nickname,
+                                email: res.kakao_account.email || "",
+                                uid: userId
+                            }, { merge: true });
+                        },
+                        fail: function(error) {
+                            console.log("사용자 정보 요청 실패:", error);
+                        }
+                    });
+                },
+                fail: function(err) {
+                    console.log("로그인 실패", err);
+                }
+            });
+        }
+
+        async function generateCode() {
+            if (!userId) {
+                alert("할인 코드를 받으려면 먼저 카카오 로그인을 해주세요!");
+                return;
+            }
+            console.log("할인 코드 생성 요청됨");
+
+            const userRef = doc(db, "discounts", userId.toString());
+            const userSnap = await getDoc(userRef);
+
+            let code;
+            if (userSnap.exists()) {
+                code = userSnap.data().code;
+                console.log("기존 할인 코드 제공:", code);
+            } else {
+                code = "CFE" + Math.floor(1000 + Math.random() * 9000);
+                console.log("새 할인 코드 생성:", code);
+                await setDoc(userRef, { code: code, used: false });
+            }
+            document.getElementById("discountCode").textContent = code;
+        }
+    </script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        .container { max-width: 400px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+        .discount-code { font-size: 24px; font-weight: bold; color: #d9534f; margin: 20px 0; }
+        button { padding: 10px 20px; font-size: 16px; background: #5cb85c; color: white; border: none; cursor: pointer; }
+        button:hover { background: #4cae4c; }
+        #kakao-login-btn { background: #FEE500; border: none; padding: 10px; cursor: pointer; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>오늘의 즉시 할인 쿠폰</h2>
+        <p>카페에서 사용 가능한 할인 코드를 확인하세요!</p>
+        <div class="discount-code" id="discountCode">******</div>
+        <button onclick="generateCode()">할인 코드 받기</button>
+        <button id="kakao-login-btn" onclick="kakaoLogin()">카카오 로그인</button>
+    </div>
+</body>
+</html>
